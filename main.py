@@ -192,22 +192,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # Render port check pass karne ke liye dummy server
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is Alive and Running!")
-
-def run_dummy_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-    server.serve_forever()
-    def main():
-    print("Bot start ho raha hai...")
-
-    # Dummy Web Server ko background thread me run karein taaki Render khush rahe
-    threading.Thread(target=run_dummy_server, daemon=True).start()
 
     # Network timeouts
     app = (
