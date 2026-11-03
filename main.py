@@ -12,12 +12,15 @@ from telegram.ext import (
 )
 import google.generativeai as genai
 
-# ================= CONFIGURATION =================
-TELEGRAM_BOT_TOKEN = "9150760320:AAFu9qP6af_GPinpXPpfNvEDnvQGTpyXKCs"
-GEMINI_API_KEY = "AQ.Ab8RN6Jg-G9Pb1Z4yub0hJVHTIFCqAe7DsaN4rOX2-Du4reEJw"
+# ================= CONFIGURATION (SECURE) =================
+# Keys ab Environment Variables se load hongi
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+if not TELEGRAM_BOT_TOKEN or not GEMINI_API_KEY:
+    raise ValueError("ERROR: TELEGRAM_BOT_TOKEN ya GEMINI_API_KEY environment variable set nahi hai!")
 
 genai.configure(api_key=GEMINI_API_KEY)
-# Gemini 1.5 Flash natively supports Text, Images, and PDFs
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 logging.basicConfig(
@@ -51,9 +54,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
-        # Highest resolution photo download karein
         photo = update.message.photo[-1]
-        photo_file = await photo.get_file()
+        # Download timeout 60s taaki connection break na ho
+        photo_file = await photo.get_file(read_timeout=60)
         photo_bytes = await photo_file.download_as_bytearray()
 
         caption = update.message.caption or "Solve this NEET question step by step in simple Hinglish."
@@ -87,7 +90,8 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
-        pdf_file = await doc.get_file()
+        # Download timeout 60s for PDF
+        pdf_file = await doc.get_file(read_timeout=60)
         pdf_bytes = await pdf_file.download_as_bytearray()
 
         pdf_data = {
@@ -95,7 +99,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "data": bytes(pdf_bytes)
         }
 
-        # Gemini se structured JSON format me Quiz mangwana
         prompt = (
             "You are a NEET Exam question extractor. Analyze this DPP/Document and create 3 to 5 NEET-level MCQs from it. "
             "Return strictly a JSON array of objects with this schema:\n"
@@ -110,7 +113,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Important: Do not exceed 90 characters for any option. correct_id must be integer (0 to 3)."
         )
 
-        # Force JSON output for 100% reliability
         response = model.generate_content(
             [prompt, pdf_data],
             generation_config={"response_mime_type": "application/json"}
@@ -121,7 +123,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ DPP se {len(quiz_list)} Questions taiyar kiye gaye hain! Solve karein:")
 
         for q in quiz_list:
-            # Telegram character limits safety checks
             question_text = q.get("question", "")[:290]
             options = [opt[:95] for opt in q.get("options", [])[:4]]
             correct_id = int(q.get("correct_id", 0))
@@ -137,7 +138,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     explanation=explanation,
                     is_anonymous=False
                 )
-                await asyncio.sleep(1) # Spam prevention delay
+                await asyncio.sleep(1)
 
     except Exception as e:
         logging.error(f"PDF Quiz Error: {e}")
@@ -163,21 +164,31 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Text Error: {e}")
         await update.message.reply_text("⚠️ Doubt solve karne me error aaya. Kripya dobara try karein.")
 
-# ================= MAIN RUNNER =================
+# ================= MAIN RUNNER (TIMEOUTS FIXED) =================
 def main():
     print("Bot start ho raha hai...")
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # Commands
+    # Network timeouts 30 seconds set kiye gaye hain taaki Render pe TimedOut error na aaye
+    app = (
+        ApplicationBuilder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .connect_timeout(30.0)
+        .read_timeout(30.0)
+        .write_timeout(30.0)
+        .get_updates_connect_timeout(30.0)
+        .get_updates_read_timeout(30.0)
+        .pool_timeout(30.0)
+        .build()
+    )
+
+    # Handlers
     app.add_handler(CommandHandler("start", start))
-
-    # Handlers for Text, Photo, and Document (PDF)
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text))
 
-    print("Bot chalu hai! Ab aap Text, Photo ya PDF bhej sakte hain.")
-    app.run_polling()
+    print("Bot chalu hai! Listening for updates...")
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
