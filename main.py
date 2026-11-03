@@ -2,8 +2,8 @@ import os
 import json
 import logging
 import asyncio
-from telegram import Update, Poll
-from telegram.ext import (
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
@@ -192,3 +192,41 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # Render port check pass karne ke liye dummy server
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is Alive and Running!")
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+    def main():
+    print("Bot start ho raha hai...")
+
+    # Dummy Web Server ko background thread me run karein taaki Render khush rahe
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+
+    # Network timeouts
+    app = (
+        ApplicationBuilder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .connect_timeout(30.0)
+        .read_timeout(30.0)
+        .write_timeout(30.0)
+        .get_updates_connect_timeout(30.0)
+        .get_updates_read_timeout(30.0)
+        .pool_timeout(30.0)
+        .build()
+    )
+
+    # Handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text))
+
+    print("Bot chalu hai! Listening for updates...")
+    app.run_polling(drop_pending_updates=True)
