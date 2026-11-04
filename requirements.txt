@@ -1,6 +1,5 @@
-python-telegram-bot>=21.0
-google-genai>=1.0.0
-flask>=3.0.0
-pypdf>=4.0.0
-python-dotenv>=1.0.0
-requests>=2.31.0
+python-telegram-bot>=20.8,<23
+Flask>=3.0
+openai>=1.66.0
+pypdf>=5.0
+python-dotenv>=1.0
